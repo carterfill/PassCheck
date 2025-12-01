@@ -26,6 +26,5 @@ logs/
 *.log
 npm-debug.log*
 
-# Ignore subproject folders (they have their own repos)
-passcheck-backend/
-passcheck-frontend/
+# Data files
+passcheck-backend/data/visitor-stats.json
