@@ -31,3 +31,7 @@ primary_region = "sin"
   cpu_kind = "shared"
   cpus = 1
   memory_mb = 256
+
+[mounts]
+  source = "passcheck_data"
+  destination = "/app/data"

@@ -32,18 +32,12 @@
 ### Thành viên chính
 
 - **Nguyễn Thành Đô** - Project Lead
-  - Chịu trách nhiệm định hướng dự án và kiến trúc hệ thống
   
-- **Nguyễn Trần Đăng Khoa** - Lead Developer & Security Engineer
-  - Phát triển thuật toán bảo mật cốt lõi và xử lý backend
+- **Nguyễn Trần Đăng Khoa** - Lead Developer
   
 - **Nguyễn Thái Ngọc** - Frontend Developer & QA
-  - Đảm bảo trải nghiệm người dùng mượt mà và kiểm thử chặt chẽ
-
-### Pháp lý & Tuân thủ
 
 - **Lê Trúc Anh** - Legal Advisor & Policy Maker
-  - Đảm bảo PassCheck tuân thủ quy định bảo vệ dữ liệu và soạn thảo chính sách bảo vệ người dùng
 
 ## License
 

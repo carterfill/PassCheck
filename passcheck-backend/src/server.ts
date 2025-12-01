@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
+import { connectDB } from './config/database';
 import passwordRoutes from './routes/password.routes';
 import generatorRoutes from './routes/generator.routes';
 import breachRoutes from './routes/breach.routes';
@@ -11,7 +12,7 @@ import visitorRoutes from './routes/visitor.routes';
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = parseInt(process.env.PORT || '3001', 10);
 
 // Trust proxy - required for Railway and other reverse proxies
 app.set('trust proxy', 1);
@@ -97,9 +98,22 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 // Bind to 0.0.0.0 for Fly.io and other cloud platforms
 const HOST = process.env.HOST || '0.0.0.0';
 
-app.listen(PORT, HOST, () => {
-  console.log(`🚀 Server is running on ${HOST}:${PORT}`);
-  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-});
+// Start server and connect to database
+const startServer = async () => {
+  try {
+    // Connect to MongoDB
+    await connectDB();
+    
+    app.listen(PORT, HOST, () => {
+      console.log(`🚀 Server is running on ${HOST}:${PORT}`);
+      console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+    });
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+};
+
+startServer();
 
 export default app;

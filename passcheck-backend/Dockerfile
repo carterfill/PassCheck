@@ -31,8 +31,11 @@ RUN npm ci --only=production
 # Copy built files from builder
 COPY --from=builder /app/dist ./dist
 
-# Copy data directory
+# Copy data directory (will be overridden by volume mount in production)
 COPY data ./data
+
+# Create data directory if it doesn't exist
+RUN mkdir -p /app/data
 
 # Expose port
 EXPOSE 8080
