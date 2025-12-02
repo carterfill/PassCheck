@@ -66,11 +66,11 @@
 
 - **Nguyễn Thành Đô** - Project Lead / Developer / Coder
   
-- **Nguyễn Trần Đăng Khoa** - Social
+- **Nguyễn Trần Đăng Khoa** - Social / Support
   
-- **Nguyễn Thái Ngọc** - Social
+- **Nguyễn Thái Ngọc** - Social / Support
 
-- **Lê Trúc Anh** - Social
+- **Lê Trúc Anh** - Social / Support
 
 ## License
 
