@@ -18,6 +18,9 @@ const getApiUrl = () => {
 
 const API_URL = getApiUrl();
 
+// Import encryption utility
+import { encryptPassword, isEncryptionEnabled } from '../utils/encryption';
+
 // Debug log - chỉ log trong development
 if (import.meta.env.DEV) {
   console.log('API Base URL:', API_URL);
@@ -99,12 +102,20 @@ export interface TrackVisitorResponse {
 
 export const passwordApi = {
   checkStrength: async (password: string): Promise<PasswordAnalysis> => {
-    const response = await api.post('/password/check', { password });
+    // Encrypt password if encryption is enabled
+    const payload = isEncryptionEnabled() 
+      ? { password: await encryptPassword(password) }
+      : { password };
+    const response = await api.post('/password/check', payload);
     return response.data;
   },
 
   analyzePassword: async (password: string) => {
-    const response = await api.post('/password/analyze', { password });
+    // Encrypt password if encryption is enabled
+    const payload = isEncryptionEnabled()
+      ? { password: await encryptPassword(password) }
+      : { password };
+    const response = await api.post('/password/analyze', payload);
     return response.data;
   },
 };
@@ -133,12 +144,20 @@ export const generatorApi = {
 
 export const breachApi = {
   checkBreach: async (password: string): Promise<BreachResult> => {
-    const response = await api.post('/breach/check', { password });
+    // Encrypt password if encryption is enabled
+    const payload = isEncryptionEnabled()
+      ? { password: await encryptPassword(password) }
+      : { password };
+    const response = await api.post('/breach/check', payload);
     return response.data;
   },
 
   checkCommon: async (password: string) => {
-    const response = await api.post('/breach/common', { password });
+    // Encrypt password if encryption is enabled
+    const payload = isEncryptionEnabled()
+      ? { password: await encryptPassword(password) }
+      : { password };
+    const response = await api.post('/breach/common', payload);
     return response.data;
   },
 };

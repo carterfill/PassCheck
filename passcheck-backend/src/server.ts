@@ -281,9 +281,9 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   const randomBytes = crypto.randomBytes(4).toString('hex');
   const errorId = Date.now().toString(36) + randomBytes;
   
-  // Sanitize request body to remove sensitive data (passwords) before logging
-  const sanitizedBody = { ...req.body };
-  if (sanitizedBody.password) {
+  // Use sanitized body if available from middleware, otherwise create one
+  const sanitizedBody = (req as any).sanitizedBody || { ...req.body };
+  if (sanitizedBody.password && sanitizedBody.password !== '[REDACTED]') {
     sanitizedBody.password = '[REDACTED]';
   }
   
@@ -293,7 +293,7 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
     path: req.path,
     method: req.method,
     ip: req.ip,
-    body: sanitizedBody // Only log sanitized body
+    body: sanitizedBody // Only log sanitized body (passwords redacted)
   });
   
   // Don't expose error details to client
