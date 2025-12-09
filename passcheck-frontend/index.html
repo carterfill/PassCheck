@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="/logo.png" />
+    <link rel="alternate icon" type="image/png" href="/logo.png" />
+    <link rel="manifest" href="/manifest.json" />
+    
+    <!-- Viewport and SEO -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="PassCheck - Công cụ kiểm tra độ mạnh mật khẩu, tạo mật khẩu an toàn, và kiểm tra rò rỉ dữ liệu" />
+    <meta name="keywords" content="password checker, password generator, password security, mật khẩu an toàn, kiểm tra mật khẩu" />
+    <meta name="author" content="PassCheck" />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="PassCheck - Password Security Tool" />
+    <meta property="og:description" content="Công cụ kiểm tra và tạo mật khẩu an toàn" />
+    
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="PassCheck - Password Security Tool" />
+    <meta name="twitter:description" content="Công cụ kiểm tra và tạo mật khẩu an toàn" />
+    
+    <!-- Theme Color -->
+    <meta name="theme-color" content="#3B82F6" />
+    
+    <title>PassCheck - Password Security Tool</title>
+    
+    <!-- Google Analytics GA4 -->
+    <script>
+      (function() {
+        const gaId = '%VITE_GA_ID%';
+        if (gaId && gaId.startsWith('G-')) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', gaId);
+          
+          // Load GA4 script
+          const script = document.createElement('script');
+          script.async = true;
+          script.src = 'https://www.googletagmanager.com/gtag/js?id=' + gaId;
+          document.head.appendChild(script);
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
