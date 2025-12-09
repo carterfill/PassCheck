@@ -4,7 +4,6 @@
  */
 
 const ALGORITHM = 'AES-GCM';
-const KEY_LENGTH = 256;
 const IV_LENGTH = 16;
 const AUTH_TAG_LENGTH = 16;
 
