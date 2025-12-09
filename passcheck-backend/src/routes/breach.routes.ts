@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import { checkBreach, checkCommonPassword } from '../controllers/breach.controller';
-import { validatePassword } from '../middleware/validation.middleware';
+import { validatePasswordPlain } from '../middleware/validation.middleware';
 
 const router = Router();
 
-router.post('/check', validatePassword, checkBreach);
-router.post('/common', validatePassword, checkCommonPassword);
+// Breach endpoints don't need encryption - they only use hashing/comparison
+router.post('/check', validatePasswordPlain, checkBreach);
+router.post('/common', validatePasswordPlain, checkCommonPassword);
 
 export default router;

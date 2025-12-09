@@ -27,7 +27,7 @@ export function sanitizeString(input: string, maxLength: number): string {
   return sanitized.trim();
 }
 
-// Validate password input
+// Validate password input (with decryption)
 export function validatePassword(req: Request, res: Response, next: NextFunction): void {
   try {
     const { password } = req.body;
@@ -65,6 +65,39 @@ export function validatePassword(req: Request, res: Response, next: NextFunction
     
     // Sanitize password
     req.body.password = sanitizeString(decryptedPassword, MAX_PASSWORD_LENGTH);
+    next();
+  } catch (error) {
+    res.status(400).json({ error: 'Invalid password input' });
+  }
+}
+
+// Validate password input (no decryption needed for breach checks)
+export function validatePasswordPlain(req: Request, res: Response, next: NextFunction): void {
+  try {
+    const { password } = req.body;
+    
+    if (!password) {
+      res.status(400).json({ error: 'Password is required' });
+      return;
+    }
+    
+    if (typeof password !== 'string') {
+      res.status(400).json({ error: 'Password must be a string' });
+      return;
+    }
+    
+    if (password.length === 0) {
+      res.status(400).json({ error: 'Password cannot be empty' });
+      return;
+    }
+    
+    if (password.length > MAX_PASSWORD_LENGTH) {
+      res.status(400).json({ error: `Password length cannot exceed ${MAX_PASSWORD_LENGTH} characters` });
+      return;
+    }
+    
+    // Sanitize password without decryption
+    req.body.password = sanitizeString(password, MAX_PASSWORD_LENGTH);
     next();
   } catch (error) {
     res.status(400).json({ error: 'Invalid password input' });

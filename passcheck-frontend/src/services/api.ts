@@ -140,16 +140,14 @@ export const generatorApi = {
 
 export const breachApi = {
   checkBreach: async (password: string): Promise<BreachResult> => {
-    // Always encrypt password before sending
-    const encryptedPassword = await encryptPassword(password);
-    const response = await api.post('/breach/check', { password: encryptedPassword });
+    // Breach check doesn't need encryption - only uses SHA-1 hash
+    const response = await api.post('/breach/check', { password });
     return response.data;
   },
 
   checkCommon: async (password: string) => {
-    // Always encrypt password before sending
-    const encryptedPassword = await encryptPassword(password);
-    const response = await api.post('/breach/common', { password: encryptedPassword });
+    // Common check doesn't need encryption - only compares strings
+    const response = await api.post('/breach/common', { password });
     return response.data;
   },
 };
