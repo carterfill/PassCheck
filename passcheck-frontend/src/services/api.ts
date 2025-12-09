@@ -18,9 +18,6 @@ const getApiUrl = () => {
 
 const API_URL = getApiUrl();
 
-// Import encryption utility
-import { encryptPassword } from '../utils/encryption';
-
 // Debug log - chỉ log trong development
 if (import.meta.env.DEV) {
   console.log('API Base URL:', API_URL);
