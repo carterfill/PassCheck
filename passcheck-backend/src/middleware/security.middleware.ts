@@ -1,8 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
+import crypto from 'crypto';
 
-// Track IP addresses for abuse detection
-interface IPTracker {
-  [ip: string]: {
+// Track browser sessions for abuse detection (instead of IP)
+interface SessionTracker {
+  [sessionId: string]: {
     requestCount: number;
     lastRequest: number;
     suspiciousCount: number;
@@ -12,7 +13,7 @@ interface IPTracker {
   };
 }
 
-const ipTracker: IPTracker = {};
+const sessionTracker: SessionTracker = {};
 const SUSPICIOUS_THRESHOLD = 100; // Increased from 30 to 100 requests per minute (allow bursts)
 const CLEANUP_INTERVAL = 60 * 60 * 1000; // 1 hour
 const MAX_BLOCK_DURATION = 60 * 60 * 1000; // 1 hour block duration
@@ -22,113 +23,78 @@ const RAPID_CLICK_THRESHOLD = 3; // Number of clicks
 const RAPID_CLICK_WINDOW = 5000; // 5 seconds in milliseconds
 const RAPID_CLICK_BLOCK_DURATION = 30000; // 30 seconds block for rapid clicks
 
-// Cleanup old IP entries periodically
+// Cleanup old session entries periodically
 setInterval(() => {
   const now = Date.now();
   const oneHourAgo = now - (60 * 60 * 1000);
   
-  for (const ip in ipTracker) {
-    if (ipTracker[ip].lastRequest < oneHourAgo) {
-      delete ipTracker[ip];
+  for (const sessionId in sessionTracker) {
+    if (sessionTracker[sessionId].lastRequest < oneHourAgo) {
+      delete sessionTracker[sessionId];
     }
   }
 }, CLEANUP_INTERVAL);
 
-// Validate IP address format
-function isValidIP(ip: string): boolean {
-  // IPv4 pattern
-  const ipv4Pattern = /^(\d{1,3}\.){3}\d{1,3}$/;
-  // IPv6 pattern (simplified)
-  const ipv6Pattern = /^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$/;
+const COOKIE_NAME = 'passcheck_session_id';
+const COOKIE_MAX_AGE = 365 * 24 * 60 * 60 * 1000; // 1 year
+
+// Get or create browser session ID
+// Uses cookie to track individual browsers instead of IP addresses
+export function getBrowserSessionId(req: Request, res?: Response): string {
+  // Try to get existing session ID from cookie
+  let sessionId = req.cookies?.[COOKIE_NAME];
   
-  if (!ip || typeof ip !== 'string') {
-    return false;
+  // Validate session ID format (should be alphanumeric, 32 chars)
+  if (sessionId && typeof sessionId === 'string' && /^[a-zA-Z0-9]{32}$/.test(sessionId)) {
+    return sessionId;
   }
   
-  // Check IPv4
-  if (ipv4Pattern.test(ip)) {
-    const parts = ip.split('.');
-    return parts.every(part => {
-      const num = parseInt(part, 10);
-      return num >= 0 && num <= 255;
+  // Generate new session ID if not exists or invalid
+  sessionId = crypto.randomBytes(16).toString('hex');
+  
+  // Set cookie with session ID if response object is provided
+  if (res) {
+    res.cookie(COOKIE_NAME, sessionId, {
+      httpOnly: true, // Prevent XSS attacks
+      secure: process.env.NODE_ENV === 'production', // HTTPS only in production
+      sameSite: 'strict', // CSRF protection
+      maxAge: COOKIE_MAX_AGE,
+      path: '/'
     });
   }
   
-  // Check IPv6 (simplified validation)
-  if (ipv6Pattern.test(ip)) {
-    return true;
-  }
-  
-  return false;
+  return sessionId;
 }
 
-// Get client IP address with validation
-// Priority: Cloudflare CF-Connecting-IP > X-Forwarded-For > X-Real-IP > Express IP
-function getClientIP(req: Request): string {
-  // Security: Validate IP addresses from headers to prevent spoofing
-  // In production behind Cloudflare, CF-Connecting-IP is the most reliable
-  
-  // Priority 1: Cloudflare CF-Connecting-IP (most reliable when behind Cloudflare)
-  const cfIP = req.headers['cf-connecting-ip'];
-  if (cfIP) {
-    const ip = Array.isArray(cfIP) ? cfIP[0] : cfIP;
-    if (isValidIP(ip)) {
-      return ip;
-    }
+// Middleware to ensure session ID cookie is set (runs before rate limiters)
+export function ensureSessionId(req: Request, res: Response, next: NextFunction): void {
+  try {
+    getBrowserSessionId(req, res);
+    next();
+  } catch (error) {
+    // If session ID creation fails, continue anyway
+    next();
   }
-  
-  // Priority 2: X-Forwarded-For (may contain multiple IPs, take first)
-  const forwarded = req.headers['x-forwarded-for'];
-  if (forwarded) {
-    const ips = Array.isArray(forwarded) ? forwarded[0] : forwarded.split(',')[0];
-    const ip = ips.trim();
-    // Only use if it's a valid IP format
-    if (isValidIP(ip)) {
-      return ip;
-    }
-  }
-  
-  // Priority 3: X-Real-IP
-  const realIP = req.headers['x-real-ip'];
-  if (realIP) {
-    const ip = Array.isArray(realIP) ? realIP[0] : realIP;
-    if (isValidIP(ip)) {
-      return ip;
-    }
-  }
-  
-  // Fallback to Express's trusted IP (requires trust proxy to be set)
-  const expressIP = req.ip;
-  if (expressIP && isValidIP(expressIP)) {
-    return expressIP;
-  }
-  
-  // Last resort: socket remote address
-  const socketIP = req.socket.remoteAddress;
-  if (socketIP && isValidIP(socketIP)) {
-    return socketIP;
-  }
-  
-  return 'unknown';
 }
 
-// Abuse detection middleware with Cloudflare support
+// Abuse detection middleware - tracks by browser session instead of IP
 export function detectAbuse(req: Request, res: Response, next: NextFunction): void {
   try {
-    const clientIP = getClientIP(req);
+    // Get or create browser session ID
+    const sessionId = getBrowserSessionId(req, res);
     
-    if (clientIP === 'unknown') {
-      // If we can't determine IP, allow but log
-      console.warn('Could not determine client IP');
+    if (!sessionId) {
+      // If we can't create session ID, allow but log
+      console.warn('Could not create browser session ID');
       return next();
     }
     
     const now = Date.now();
     const oneMinuteAgo = now - 60000;
     
-    // Initialize or get IP tracking data
-    if (!ipTracker[clientIP]) {
-      ipTracker[clientIP] = {
+    // Initialize or get session tracking data
+    if (!sessionTracker[sessionId]) {
+      sessionTracker[sessionId] = {
         requestCount: 0,
         lastRequest: now,
         suspiciousCount: 0,
@@ -136,19 +102,20 @@ export function detectAbuse(req: Request, res: Response, next: NextFunction): vo
       };
     }
     
-    const tracker = ipTracker[clientIP];
+    const tracker = sessionTracker[sessionId];
     
-    // Check if IP is currently blocked (general abuse block)
+    // Check if browser session is currently blocked (general abuse block)
     if (tracker.blockedUntil && now < tracker.blockedUntil) {
       const remainingSeconds = Math.ceil((tracker.blockedUntil - now) / 1000);
       res.status(429).json({ 
-        error: 'IP temporarily blocked due to abuse. Please try again later.',
+        error: 'Tài khoản tạm thời bị chặn do lạm dụng. Vui lòng thử lại sau.',
+        message: 'Account temporarily blocked due to abuse. Please try again later.',
         retryAfter: remainingSeconds
       });
       return;
     }
     
-    // Check if IP is blocked due to rapid clicks
+    // Check if browser session is blocked due to rapid clicks
     if (tracker.rapidClickBlockedUntil && now < tracker.rapidClickBlockedUntil) {
       const remainingSeconds = Math.ceil((tracker.rapidClickBlockedUntil - now) / 1000);
       res.status(429).json({ 
@@ -181,7 +148,7 @@ export function detectAbuse(req: Request, res: Response, next: NextFunction): vo
     // If 3 or more clicks in the window, block
     if (tracker.rapidClicks.length >= RAPID_CLICK_THRESHOLD) {
       tracker.rapidClickBlockedUntil = now + RAPID_CLICK_BLOCK_DURATION;
-      console.warn(`Rapid click detected from IP: ${clientIP} (${tracker.rapidClicks.length} clicks in ${RAPID_CLICK_WINDOW}ms)`);
+      console.warn(`Rapid click detected from browser session: ${sessionId.substring(0, 8)}... (${tracker.rapidClicks.length} clicks in ${RAPID_CLICK_WINDOW}ms)`);
       res.status(429).json({ 
         error: 'Vui lòng không nhấn liên tục. Hãy đợi một chút trước khi thử lại.',
         message: 'Please do not click continuously. Please wait a moment before trying again.',
@@ -206,14 +173,15 @@ export function detectAbuse(req: Request, res: Response, next: NextFunction): vo
       // Log suspicious activity with Cloudflare Ray ID if available
       const cfRay = req.headers['cf-ray'];
       const rayInfo = cfRay ? ` CF-Ray: ${cfRay}` : '';
-      console.warn(`Suspicious activity detected from IP: ${clientIP} (${tracker.requestCount} requests/minute)${rayInfo}`);
+      console.warn(`Suspicious activity detected from browser session: ${sessionId.substring(0, 8)}... (${tracker.requestCount} requests/minute)${rayInfo}`);
       
       // Block if too many suspicious activities (stricter: block after 2 violations)
       if (tracker.suspiciousCount >= 2) {
         tracker.blockedUntil = now + MAX_BLOCK_DURATION;
-        console.error(`Blocking IP: ${clientIP} for ${MAX_BLOCK_DURATION / 1000 / 60} minutes due to repeated suspicious activity`);
+        console.error(`Blocking browser session: ${sessionId.substring(0, 8)}... for ${MAX_BLOCK_DURATION / 1000 / 60} minutes due to repeated suspicious activity`);
         res.status(429).json({ 
-          error: 'IP temporarily blocked due to abuse. Please try again later.',
+          error: 'Tài khoản tạm thời bị chặn do lạm dụng. Vui lòng thử lại sau.',
+          message: 'Account temporarily blocked due to abuse. Please try again later.',
           retryAfter: Math.ceil(MAX_BLOCK_DURATION / 1000)
         });
         return;

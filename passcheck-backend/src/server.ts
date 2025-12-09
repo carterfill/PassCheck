@@ -3,13 +3,14 @@ import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
+import cookieParser from 'cookie-parser';
 import crypto from 'crypto';
 import { connectDB } from './config/database';
 import passwordRoutes from './routes/password.routes';
 import generatorRoutes from './routes/generator.routes';
 import breachRoutes from './routes/breach.routes';
 import visitorRoutes from './routes/visitor.routes';
-import { securityHeaders, detectAbuse } from './middleware/security.middleware';
+import { securityHeaders, detectAbuse, getBrowserSessionId, ensureSessionId } from './middleware/security.middleware';
 import { validateBodySize } from './middleware/validation.middleware';
 
 dotenv.config();
@@ -19,6 +20,9 @@ const PORT = parseInt(process.env.PORT || '3001', 10);
 
 // Trust proxy - required for Railway and other reverse proxies
 app.set('trust proxy', 1);
+
+// Cookie parser - required for browser session tracking
+app.use(cookieParser());
 
 // Security middleware
 app.use(helmet({
@@ -92,14 +96,10 @@ const generalLimiter = rateLimit({
   legacyHeaders: false,
   skipSuccessfulRequests: false,
   skipFailedRequests: false,
-  // Use Cloudflare IP if available
+  // Use browser session ID instead of IP
   keyGenerator: (req) => {
     try {
-      const cfIP = req.headers['cf-connecting-ip'];
-      if (cfIP) {
-        return Array.isArray(cfIP) ? cfIP[0] : cfIP;
-      }
-      return req.ip || req.socket.remoteAddress || 'unknown';
+      return getBrowserSessionId(req);
     } catch (error) {
       // Fallback if keyGenerator fails
       return req.ip || 'unknown';
@@ -108,7 +108,8 @@ const generalLimiter = rateLimit({
   // Handler for rate limit errors
   handler: (req, res) => {
     res.status(429).json({
-      error: 'Too many requests from this IP, please try again later.',
+      error: 'Quá nhiều yêu cầu từ trình duyệt này. Vui lòng thử lại sau.',
+      message: 'Too many requests from this browser. Please try again later.',
       retryAfter: 15 * 60 // 15 minutes in seconds
     });
   }
@@ -123,11 +124,7 @@ const passwordLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req) => {
     try {
-      const cfIP = req.headers['cf-connecting-ip'];
-      if (cfIP) {
-        return Array.isArray(cfIP) ? cfIP[0] : cfIP;
-      }
-      return req.ip || req.socket.remoteAddress || 'unknown';
+      return getBrowserSessionId(req);
     } catch (error) {
       return req.ip || 'unknown';
     }
@@ -149,11 +146,7 @@ const generatorLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req) => {
     try {
-      const cfIP = req.headers['cf-connecting-ip'];
-      if (cfIP) {
-        return Array.isArray(cfIP) ? cfIP[0] : cfIP;
-      }
-      return req.ip || req.socket.remoteAddress || 'unknown';
+      return getBrowserSessionId(req);
     } catch (error) {
       return req.ip || 'unknown';
     }
