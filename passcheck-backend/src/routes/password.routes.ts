@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import { checkPasswordStrength, analyzePassword } from '../controllers/password.controller';
-import { validatePassword } from '../middleware/validation.middleware';
+import { validatePasswordPlain } from '../middleware/validation.middleware';
 
 const router = Router();
 
-router.post('/check', validatePassword, checkPasswordStrength);
-router.post('/analyze', validatePassword, analyzePassword);
+// Password analysis endpoints don't need encryption - only analyze locally
+router.post('/check', validatePasswordPlain, checkPasswordStrength);
+router.post('/analyze', validatePasswordPlain, analyzePassword);
 
 export default router;

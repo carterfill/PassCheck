@@ -102,16 +102,14 @@ export interface TrackVisitorResponse {
 
 export const passwordApi = {
   checkStrength: async (password: string): Promise<PasswordAnalysis> => {
-    // Always encrypt password before sending
-    const encryptedPassword = await encryptPassword(password);
-    const response = await api.post('/password/check', { password: encryptedPassword });
+    // Password analysis doesn't need encryption - only analyzes locally
+    const response = await api.post('/password/check', { password });
     return response.data;
   },
 
   analyzePassword: async (password: string) => {
-    // Always encrypt password before sending
-    const encryptedPassword = await encryptPassword(password);
-    const response = await api.post('/password/analyze', { password: encryptedPassword });
+    // Password analysis doesn't need encryption - only analyzes locally
+    const response = await api.post('/password/analyze', { password });
     return response.data;
   },
 };
