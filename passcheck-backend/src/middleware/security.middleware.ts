@@ -7,6 +7,8 @@ interface IPTracker {
     lastRequest: number;
     suspiciousCount: number;
     blockedUntil?: number; // Timestamp when block expires
+    rapidClicks: number[]; // Timestamps of recent rapid clicks
+    rapidClickBlockedUntil?: number; // Timestamp when rapid click block expires
   };
 }
 
@@ -14,6 +16,11 @@ const ipTracker: IPTracker = {};
 const SUSPICIOUS_THRESHOLD = 100; // Increased from 30 to 100 requests per minute (allow bursts)
 const CLEANUP_INTERVAL = 60 * 60 * 1000; // 1 hour
 const MAX_BLOCK_DURATION = 60 * 60 * 1000; // 1 hour block duration
+
+// Rapid click detection: 3 clicks within 5 seconds
+const RAPID_CLICK_THRESHOLD = 3; // Number of clicks
+const RAPID_CLICK_WINDOW = 5000; // 5 seconds in milliseconds
+const RAPID_CLICK_BLOCK_DURATION = 30000; // 30 seconds block for rapid clicks
 
 // Cleanup old IP entries periodically
 setInterval(() => {
@@ -124,13 +131,14 @@ export function detectAbuse(req: Request, res: Response, next: NextFunction): vo
       ipTracker[clientIP] = {
         requestCount: 0,
         lastRequest: now,
-        suspiciousCount: 0
+        suspiciousCount: 0,
+        rapidClicks: []
       };
     }
     
     const tracker = ipTracker[clientIP];
     
-    // Check if IP is currently blocked
+    // Check if IP is currently blocked (general abuse block)
     if (tracker.blockedUntil && now < tracker.blockedUntil) {
       const remainingSeconds = Math.ceil((tracker.blockedUntil - now) / 1000);
       res.status(429).json({ 
@@ -140,10 +148,46 @@ export function detectAbuse(req: Request, res: Response, next: NextFunction): vo
       return;
     }
     
-    // Clear block if expired
+    // Check if IP is blocked due to rapid clicks
+    if (tracker.rapidClickBlockedUntil && now < tracker.rapidClickBlockedUntil) {
+      const remainingSeconds = Math.ceil((tracker.rapidClickBlockedUntil - now) / 1000);
+      res.status(429).json({ 
+        error: 'Vui lòng không nhấn liên tục. Hãy đợi một chút trước khi thử lại.',
+        message: 'Please do not click continuously. Please wait a moment before trying again.',
+        retryAfter: remainingSeconds
+      });
+      return;
+    }
+    
+    // Clear rapid click block if expired
+    if (tracker.rapidClickBlockedUntil && now >= tracker.rapidClickBlockedUntil) {
+      tracker.rapidClickBlockedUntil = undefined;
+      tracker.rapidClicks = [];
+    }
+    
+    // Clear general block if expired
     if (tracker.blockedUntil && now >= tracker.blockedUntil) {
       tracker.blockedUntil = undefined;
       tracker.suspiciousCount = 0;
+    }
+    
+    // Rapid click detection: Check if 3 clicks within 5 seconds
+    // Remove clicks older than the window
+    tracker.rapidClicks = tracker.rapidClicks.filter(timestamp => now - timestamp < RAPID_CLICK_WINDOW);
+    
+    // Add current click timestamp
+    tracker.rapidClicks.push(now);
+    
+    // If 3 or more clicks in the window, block
+    if (tracker.rapidClicks.length >= RAPID_CLICK_THRESHOLD) {
+      tracker.rapidClickBlockedUntil = now + RAPID_CLICK_BLOCK_DURATION;
+      console.warn(`Rapid click detected from IP: ${clientIP} (${tracker.rapidClicks.length} clicks in ${RAPID_CLICK_WINDOW}ms)`);
+      res.status(429).json({ 
+        error: 'Vui lòng không nhấn liên tục. Hãy đợi một chút trước khi thử lại.',
+        message: 'Please do not click continuously. Please wait a moment before trying again.',
+        retryAfter: Math.ceil(RAPID_CLICK_BLOCK_DURATION / 1000)
+      });
+      return;
     }
     
     // Reset count if last request was more than a minute ago
