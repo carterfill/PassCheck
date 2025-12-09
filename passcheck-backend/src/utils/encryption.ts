@@ -8,13 +8,10 @@ const IV_LENGTH = 16; // 16 bytes for AES
 const AUTH_TAG_LENGTH = 16; // 16 bytes for GCM
 
 // Derive a 32-byte key from the environment variable
+// This must match the frontend key derivation (SHA-256 hash)
 function getKey(): Buffer {
-  // If ENCRYPTION_KEY is already 32 bytes hex (64 chars), use it directly
-  // Otherwise, derive a key using SHA-256
-  if (ENCRYPTION_KEY.length === 64 && /^[0-9a-fA-F]+$/.test(ENCRYPTION_KEY)) {
-    return Buffer.from(ENCRYPTION_KEY, 'hex');
-  }
-  // Derive a 32-byte key using SHA-256
+  // Always derive a 32-byte key using SHA-256 (same as frontend)
+  // This ensures compatibility between frontend and backend
   return crypto.createHash('sha256').update(ENCRYPTION_KEY).digest();
 }
 

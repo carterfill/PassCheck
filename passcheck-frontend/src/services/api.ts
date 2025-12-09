@@ -19,7 +19,7 @@ const getApiUrl = () => {
 const API_URL = getApiUrl();
 
 // Import encryption utility
-import { encryptPassword, isEncryptionEnabled } from '../utils/encryption';
+import { encryptPassword } from '../utils/encryption';
 
 // Debug log - chỉ log trong development
 if (import.meta.env.DEV) {
@@ -102,20 +102,16 @@ export interface TrackVisitorResponse {
 
 export const passwordApi = {
   checkStrength: async (password: string): Promise<PasswordAnalysis> => {
-    // Encrypt password if encryption is enabled
-    const payload = isEncryptionEnabled() 
-      ? { password: await encryptPassword(password) }
-      : { password };
-    const response = await api.post('/password/check', payload);
+    // Always encrypt password before sending
+    const encryptedPassword = await encryptPassword(password);
+    const response = await api.post('/password/check', { password: encryptedPassword });
     return response.data;
   },
 
   analyzePassword: async (password: string) => {
-    // Encrypt password if encryption is enabled
-    const payload = isEncryptionEnabled()
-      ? { password: await encryptPassword(password) }
-      : { password };
-    const response = await api.post('/password/analyze', payload);
+    // Always encrypt password before sending
+    const encryptedPassword = await encryptPassword(password);
+    const response = await api.post('/password/analyze', { password: encryptedPassword });
     return response.data;
   },
 };
@@ -144,20 +140,16 @@ export const generatorApi = {
 
 export const breachApi = {
   checkBreach: async (password: string): Promise<BreachResult> => {
-    // Encrypt password if encryption is enabled
-    const payload = isEncryptionEnabled()
-      ? { password: await encryptPassword(password) }
-      : { password };
-    const response = await api.post('/breach/check', payload);
+    // Always encrypt password before sending
+    const encryptedPassword = await encryptPassword(password);
+    const response = await api.post('/breach/check', { password: encryptedPassword });
     return response.data;
   },
 
   checkCommon: async (password: string) => {
-    // Encrypt password if encryption is enabled
-    const payload = isEncryptionEnabled()
-      ? { password: await encryptPassword(password) }
-      : { password };
-    const response = await api.post('/breach/common', payload);
+    // Always encrypt password before sending
+    const encryptedPassword = await encryptPassword(password);
+    const response = await api.post('/breach/common', { password: encryptedPassword });
     return response.data;
   },
 };
