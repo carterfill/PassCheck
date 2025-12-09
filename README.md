@@ -1,6 +1,6 @@
 # PassCheck
 
-Ứng dụng kiểm tra độ mạnh mật khẩu, tạo mật khẩu ngẫu nhiên và kiểm tra dữ liệu bị rò rỉ.
+Website kiểm tra độ mạnh mật khẩu, tạo mật khẩu ngẫu nhiên và kiểm tra dữ liệu bị rò rỉ.
 
 ## Tính năng
 
