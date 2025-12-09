@@ -22,7 +22,9 @@ export const connectDB = async (): Promise<void> => {
     // Validate MongoDB URI format
     if (!MONGODB_URI.startsWith('mongodb://') && !MONGODB_URI.startsWith('mongodb+srv://')) {
       console.error('Invalid MongoDB URI format');
-      throw new Error('Invalid MongoDB URI format');
+      console.warn('App will continue without database connection');
+      // Don't throw - allow graceful degradation
+      return;
     }
 
     const options = {

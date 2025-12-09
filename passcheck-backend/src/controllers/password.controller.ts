@@ -92,9 +92,9 @@ export const checkPasswordStrength = async (req: Request, res: Response) => {
     const hasNumbers = /[0-9]/.test(password);
     const hasSpecialChars = /[^A-Za-z0-9]/.test(password);
     
-    // Calculate character diversity
+    // Calculate character diversity (prevent division by zero)
     const uniqueChars = new Set(password).size;
-    const charDiversity = (uniqueChars / length) * 100;
+    const charDiversity = length > 0 ? (uniqueChars / length) * 100 : 0;
 
     // Calculate entropy
     const entropy = calculateEntropy(password);

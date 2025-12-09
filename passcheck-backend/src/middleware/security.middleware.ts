@@ -11,7 +11,7 @@ interface IPTracker {
 }
 
 const ipTracker: IPTracker = {};
-const SUSPICIOUS_THRESHOLD = 30; // Reduced from 50 to 30 requests per minute (stricter)
+const SUSPICIOUS_THRESHOLD = 100; // Increased from 30 to 100 requests per minute (allow bursts)
 const CLEANUP_INTERVAL = 60 * 60 * 1000; // 1 hour
 const MAX_BLOCK_DURATION = 60 * 60 * 1000; // 1 hour block duration
 

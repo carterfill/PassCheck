@@ -83,10 +83,10 @@ app.use(cors({
 }));
 
 // Strict rate limiting - multiple tiers (enhanced for DDoS protection)
-// General API rate limit - very strict to prevent DDoS
+// General API rate limit - balanced to prevent DDoS but allow normal usage
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20, // Reduced from 30 to 20 requests per 15 minutes (stricter)
+  max: 50, // Increased from 20 to 50 to allow normal usage (5 clicks is normal)
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
@@ -94,44 +94,76 @@ const generalLimiter = rateLimit({
   skipFailedRequests: false,
   // Use Cloudflare IP if available
   keyGenerator: (req) => {
-    const cfIP = req.headers['cf-connecting-ip'];
-    if (cfIP) {
-      return Array.isArray(cfIP) ? cfIP[0] : cfIP;
+    try {
+      const cfIP = req.headers['cf-connecting-ip'];
+      if (cfIP) {
+        return Array.isArray(cfIP) ? cfIP[0] : cfIP;
+      }
+      return req.ip || req.socket.remoteAddress || 'unknown';
+    } catch (error) {
+      // Fallback if keyGenerator fails
+      return req.ip || 'unknown';
     }
-    return req.ip || req.socket.remoteAddress || 'unknown';
   },
+  // Handler for rate limit errors
+  handler: (req, res) => {
+    res.status(429).json({
+      error: 'Too many requests from this IP, please try again later.',
+      retryAfter: 15 * 60 // 15 minutes in seconds
+    });
+  }
 });
 
 // Strict rate limit for password checking (more resource intensive)
 const passwordLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 15, // Reduced from 20 to 15 password checks per 15 minutes
+  max: 30, // Increased from 15 to 30 to allow normal usage
   message: 'Too many password check requests. Please wait before trying again.',
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => {
-    const cfIP = req.headers['cf-connecting-ip'];
-    if (cfIP) {
-      return Array.isArray(cfIP) ? cfIP[0] : cfIP;
+    try {
+      const cfIP = req.headers['cf-connecting-ip'];
+      if (cfIP) {
+        return Array.isArray(cfIP) ? cfIP[0] : cfIP;
+      }
+      return req.ip || req.socket.remoteAddress || 'unknown';
+    } catch (error) {
+      return req.ip || 'unknown';
     }
-    return req.ip || req.socket.remoteAddress || 'unknown';
   },
+  handler: (req, res) => {
+    res.status(429).json({
+      error: 'Too many password check requests. Please wait before trying again.',
+      retryAfter: 15 * 60
+    });
+  }
 });
 
 // Strict rate limit for generator (can be abused)
 const generatorLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // Reduced from 15 to 10 generations per 15 minutes
+  max: 25, // Increased from 10 to 25 to allow normal usage
   message: 'Too many password generation requests. Please wait before trying again.',
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => {
-    const cfIP = req.headers['cf-connecting-ip'];
-    if (cfIP) {
-      return Array.isArray(cfIP) ? cfIP[0] : cfIP;
+    try {
+      const cfIP = req.headers['cf-connecting-ip'];
+      if (cfIP) {
+        return Array.isArray(cfIP) ? cfIP[0] : cfIP;
+      }
+      return req.ip || req.socket.remoteAddress || 'unknown';
+    } catch (error) {
+      return req.ip || 'unknown';
     }
-    return req.ip || req.socket.remoteAddress || 'unknown';
   },
+  handler: (req, res) => {
+    res.status(429).json({
+      error: 'Too many password generation requests. Please wait before trying again.',
+      retryAfter: 15 * 60
+    });
+  }
 });
 
 // Apply general limiter to all routes
@@ -147,11 +179,20 @@ app.use(validateBodySize);
 app.use(express.json({ limit: '5kb' })); // Reduced from 10kb to 5kb
 app.use(express.urlencoded({ extended: true, limit: '5kb' })); // Reduced from 10kb to 5kb
 
-// Request timeout middleware to prevent hanging requests
+// Request timeout middleware to prevent hanging requests (increased timeout)
 app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
-  req.setTimeout(10000, () => {
-    res.status(408).json({ error: 'Request timeout' });
+  // Set timeout but don't kill the request immediately
+  const timeout = setTimeout(() => {
+    if (!res.headersSent) {
+      res.status(408).json({ error: 'Request timeout' });
+    }
+  }, 30000); // 30 seconds instead of 10
+  
+  // Clear timeout when response is sent
+  res.on('finish', () => {
+    clearTimeout(timeout);
   });
+  
   next();
 });
 
@@ -268,20 +309,19 @@ const startServer = async () => {
 };
 
 // Global error handlers to prevent crashes
+// NEVER exit in production - let process manager (Fly.io, PM2, etc.) handle restarts
 process.on('uncaughtException', (error: Error) => {
   console.error('Uncaught Exception:', error);
-  // Don't exit in production, let the process manager handle it
-  if (process.env.NODE_ENV !== 'production') {
-    process.exit(1);
-  }
+  console.error('Stack:', error.stack);
+  // Log but don't exit - let the process manager handle it
+  // This prevents server from crashing on unexpected errors
 });
 
 process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-  // Don't exit in production
-  if (process.env.NODE_ENV !== 'production') {
-    process.exit(1);
-  }
+  console.error('Unhandled Rejection at:', promise);
+  console.error('Reason:', reason);
+  // Log but don't exit - let the process manager handle it
+  // This prevents server from crashing on unhandled promise rejections
 });
 
 // Graceful shutdown

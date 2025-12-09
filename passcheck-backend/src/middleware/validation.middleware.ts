@@ -134,12 +134,15 @@ export function validateMemorablePassword(req: Request, res: Response, next: Nex
     }
     
     // Validate and sanitize each keyword
-    const sanitizedKeywords = keywords.map((keyword: any, index: number) => {
+    const sanitizedKeywords: string[] = [];
+    for (let index = 0; index < keywords.length; index++) {
+      const keyword = keywords[index];
       if (typeof keyword !== 'string') {
-        throw new Error(`Keyword at index ${index} must be a string`);
+        res.status(400).json({ error: `Keyword at index ${index} must be a string` });
+        return;
       }
-      return sanitizeString(keyword, MAX_KEYWORD_LENGTH);
-    });
+      sanitizedKeywords.push(sanitizeString(keyword, MAX_KEYWORD_LENGTH));
+    }
     
     req.body.keywords = sanitizedKeywords;
     
