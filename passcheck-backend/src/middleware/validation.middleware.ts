@@ -247,10 +247,10 @@ export function validateVisitorId(req: Request, res: Response, next: NextFunctio
   }
 }
 
-// Validate JSON body size
+// Validate JSON body size (stricter to prevent DoS)
 export function validateBodySize(req: Request, res: Response, next: NextFunction): void {
   const contentLength = req.get('content-length');
-  const MAX_BODY_SIZE = 10240; // 10KB
+  const MAX_BODY_SIZE = 5120; // Reduced from 10KB to 5KB
   
   if (contentLength && parseInt(contentLength, 10) > MAX_BODY_SIZE) {
     res.status(413).json({ error: 'Request body too large' });

@@ -6,12 +6,14 @@ interface IPTracker {
     requestCount: number;
     lastRequest: number;
     suspiciousCount: number;
+    blockedUntil?: number; // Timestamp when block expires
   };
 }
 
 const ipTracker: IPTracker = {};
-const SUSPICIOUS_THRESHOLD = 50; // Requests per minute
+const SUSPICIOUS_THRESHOLD = 30; // Reduced from 50 to 30 requests per minute (stricter)
 const CLEANUP_INTERVAL = 60 * 60 * 1000; // 1 hour
+const MAX_BLOCK_DURATION = 60 * 60 * 1000; // 1 hour block duration
 
 // Cleanup old IP entries periodically
 setInterval(() => {
@@ -54,11 +56,21 @@ function isValidIP(ip: string): boolean {
 }
 
 // Get client IP address with validation
+// Priority: Cloudflare CF-Connecting-IP > X-Forwarded-For > X-Real-IP > Express IP
 function getClientIP(req: Request): string {
   // Security: Validate IP addresses from headers to prevent spoofing
-  // In production behind a trusted proxy, these headers are set by the proxy
-  // But we still validate the format to prevent basic spoofing attempts
+  // In production behind Cloudflare, CF-Connecting-IP is the most reliable
   
+  // Priority 1: Cloudflare CF-Connecting-IP (most reliable when behind Cloudflare)
+  const cfIP = req.headers['cf-connecting-ip'];
+  if (cfIP) {
+    const ip = Array.isArray(cfIP) ? cfIP[0] : cfIP;
+    if (isValidIP(ip)) {
+      return ip;
+    }
+  }
+  
+  // Priority 2: X-Forwarded-For (may contain multiple IPs, take first)
   const forwarded = req.headers['x-forwarded-for'];
   if (forwarded) {
     const ips = Array.isArray(forwarded) ? forwarded[0] : forwarded.split(',')[0];
@@ -69,6 +81,7 @@ function getClientIP(req: Request): string {
     }
   }
   
+  // Priority 3: X-Real-IP
   const realIP = req.headers['x-real-ip'];
   if (realIP) {
     const ip = Array.isArray(realIP) ? realIP[0] : realIP;
@@ -92,7 +105,7 @@ function getClientIP(req: Request): string {
   return 'unknown';
 }
 
-// Abuse detection middleware
+// Abuse detection middleware with Cloudflare support
 export function detectAbuse(req: Request, res: Response, next: NextFunction): void {
   try {
     const clientIP = getClientIP(req);
@@ -117,28 +130,47 @@ export function detectAbuse(req: Request, res: Response, next: NextFunction): vo
     
     const tracker = ipTracker[clientIP];
     
+    // Check if IP is currently blocked
+    if (tracker.blockedUntil && now < tracker.blockedUntil) {
+      const remainingSeconds = Math.ceil((tracker.blockedUntil - now) / 1000);
+      res.status(429).json({ 
+        error: 'IP temporarily blocked due to abuse. Please try again later.',
+        retryAfter: remainingSeconds
+      });
+      return;
+    }
+    
+    // Clear block if expired
+    if (tracker.blockedUntil && now >= tracker.blockedUntil) {
+      tracker.blockedUntil = undefined;
+      tracker.suspiciousCount = 0;
+    }
+    
     // Reset count if last request was more than a minute ago
     if (tracker.lastRequest < oneMinuteAgo) {
       tracker.requestCount = 0;
-      tracker.suspiciousCount = 0;
+      // Don't reset suspiciousCount immediately, keep it for tracking
     }
     
     tracker.requestCount++;
     tracker.lastRequest = now;
     
-    // Check for suspicious activity
+    // Check for suspicious activity (stricter threshold)
     if (tracker.requestCount > SUSPICIOUS_THRESHOLD) {
       tracker.suspiciousCount++;
       
-      // Log suspicious activity
-      console.warn(`Suspicious activity detected from IP: ${clientIP} (${tracker.requestCount} requests/minute)`);
+      // Log suspicious activity with Cloudflare Ray ID if available
+      const cfRay = req.headers['cf-ray'];
+      const rayInfo = cfRay ? ` CF-Ray: ${cfRay}` : '';
+      console.warn(`Suspicious activity detected from IP: ${clientIP} (${tracker.requestCount} requests/minute)${rayInfo}`);
       
-      // Block if too many suspicious activities
-      if (tracker.suspiciousCount > 3) {
-        console.error(`Blocking IP: ${clientIP} due to repeated suspicious activity`);
+      // Block if too many suspicious activities (stricter: block after 2 violations)
+      if (tracker.suspiciousCount >= 2) {
+        tracker.blockedUntil = now + MAX_BLOCK_DURATION;
+        console.error(`Blocking IP: ${clientIP} for ${MAX_BLOCK_DURATION / 1000 / 60} minutes due to repeated suspicious activity`);
         res.status(429).json({ 
-          error: 'Too many requests. Please try again later.',
-          retryAfter: 60
+          error: 'IP temporarily blocked due to abuse. Please try again later.',
+          retryAfter: Math.ceil(MAX_BLOCK_DURATION / 1000)
         });
         return;
       }

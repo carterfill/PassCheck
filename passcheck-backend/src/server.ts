@@ -82,34 +82,56 @@ app.use(cors({
   maxAge: 86400 // 24 hours
 }));
 
-// Strict rate limiting - multiple tiers
-// General API rate limit - stricter
+// Strict rate limiting - multiple tiers (enhanced for DDoS protection)
+// General API rate limit - very strict to prevent DDoS
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 30, // Reduced from 100 to 30 requests per 15 minutes
+  max: 20, // Reduced from 30 to 20 requests per 15 minutes (stricter)
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: false,
   skipFailedRequests: false,
+  // Use Cloudflare IP if available
+  keyGenerator: (req) => {
+    const cfIP = req.headers['cf-connecting-ip'];
+    if (cfIP) {
+      return Array.isArray(cfIP) ? cfIP[0] : cfIP;
+    }
+    return req.ip || req.socket.remoteAddress || 'unknown';
+  },
 });
 
 // Strict rate limit for password checking (more resource intensive)
 const passwordLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20, // 20 password checks per 15 minutes
+  max: 15, // Reduced from 20 to 15 password checks per 15 minutes
   message: 'Too many password check requests. Please wait before trying again.',
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => {
+    const cfIP = req.headers['cf-connecting-ip'];
+    if (cfIP) {
+      return Array.isArray(cfIP) ? cfIP[0] : cfIP;
+    }
+    return req.ip || req.socket.remoteAddress || 'unknown';
+  },
 });
 
 // Strict rate limit for generator (can be abused)
 const generatorLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 15, // 15 generations per 15 minutes
+  max: 10, // Reduced from 15 to 10 generations per 15 minutes
   message: 'Too many password generation requests. Please wait before trying again.',
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => {
+    const cfIP = req.headers['cf-connecting-ip'];
+    if (cfIP) {
+      return Array.isArray(cfIP) ? cfIP[0] : cfIP;
+    }
+    return req.ip || req.socket.remoteAddress || 'unknown';
+  },
 });
 
 // Apply general limiter to all routes
@@ -121,9 +143,17 @@ app.use(detectAbuse);
 // Body size validation
 app.use(validateBodySize);
 
-// JSON parsing with size limits
-app.use(express.json({ limit: '10kb' }));
-app.use(express.urlencoded({ extended: true, limit: '10kb' }));
+// JSON parsing with size limits (stricter to prevent DoS)
+app.use(express.json({ limit: '5kb' })); // Reduced from 10kb to 5kb
+app.use(express.urlencoded({ extended: true, limit: '5kb' })); // Reduced from 10kb to 5kb
+
+// Request timeout middleware to prevent hanging requests
+app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
+  req.setTimeout(10000, () => {
+    res.status(408).json({ error: 'Request timeout' });
+  });
+  next();
+});
 
 // Root endpoint - API info
 app.get('/', (req, res) => {
@@ -155,13 +185,20 @@ app.get('/', (req, res) => {
   });
 });
 
-// Health check with rate limiting
+// Health check with rate limiting (stricter)
 const healthCheckLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
-  max: 10, // 10 requests per minute for health checks
+  max: 5, // Reduced from 10 to 5 requests per minute for health checks
   message: 'Too many health check requests. Please wait before trying again.',
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => {
+    const cfIP = req.headers['cf-connecting-ip'];
+    if (cfIP) {
+      return Array.isArray(cfIP) ? cfIP[0] : cfIP;
+    }
+    return req.ip || req.socket.remoteAddress || 'unknown';
+  },
 });
 
 app.get('/api/health', healthCheckLimiter, (req, res) => {
@@ -229,6 +266,34 @@ const startServer = async () => {
     process.exit(1);
   }
 };
+
+// Global error handlers to prevent crashes
+process.on('uncaughtException', (error: Error) => {
+  console.error('Uncaught Exception:', error);
+  // Don't exit in production, let the process manager handle it
+  if (process.env.NODE_ENV !== 'production') {
+    process.exit(1);
+  }
+});
+
+process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  // Don't exit in production
+  if (process.env.NODE_ENV !== 'production') {
+    process.exit(1);
+  }
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully');
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT received, shutting down gracefully');
+  process.exit(0);
+});
 
 startServer();
 
