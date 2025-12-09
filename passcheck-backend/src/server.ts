@@ -13,6 +13,24 @@ import visitorRoutes from './routes/visitor.routes';
 import { securityHeaders, detectAbuse, getBrowserSessionId, ensureSessionId } from './middleware/security.middleware';
 import { validateBodySize } from './middleware/validation.middleware';
 
+// Middleware to sanitize sensitive data (passwords) from request body before logging
+function sanitizeRequestBody(req: express.Request, res: express.Response, next: express.NextFunction): void {
+  // Store original body for processing
+  const originalBody = { ...req.body };
+  
+  // Create sanitized version for logging (if needed)
+  if (req.body && typeof req.body === 'object') {
+    const sanitized = { ...req.body };
+    if (sanitized.password) {
+      sanitized.password = '[REDACTED]';
+    }
+    // Attach sanitized version to request for logging purposes
+    (req as any).sanitizedBody = sanitized;
+  }
+  
+  next();
+}
+
 dotenv.config();
 
 const app = express();
@@ -85,6 +103,9 @@ app.use(cors({
   allowedHeaders: ['Content-Type'],
   maxAge: 86400 // 24 hours
 }));
+
+// Ensure session ID cookie is set before rate limiting
+app.use(ensureSessionId);
 
 // Strict rate limiting - multiple tiers (enhanced for DDoS protection)
 // General API rate limit - balanced to prevent DDoS but allow normal usage
@@ -172,6 +193,9 @@ app.use(validateBodySize);
 app.use(express.json({ limit: '5kb' })); // Reduced from 10kb to 5kb
 app.use(express.urlencoded({ extended: true, limit: '5kb' })); // Reduced from 10kb to 5kb
 
+// Sanitize sensitive data from request body before any logging
+app.use(sanitizeRequestBody);
+
 // Request timeout middleware to prevent hanging requests (increased timeout)
 app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
   // Set timeout but don't kill the request immediately
@@ -256,12 +280,20 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   // Generate secure error ID using crypto
   const randomBytes = crypto.randomBytes(4).toString('hex');
   const errorId = Date.now().toString(36) + randomBytes;
+  
+  // Sanitize request body to remove sensitive data (passwords) before logging
+  const sanitizedBody = { ...req.body };
+  if (sanitizedBody.password) {
+    sanitizedBody.password = '[REDACTED]';
+  }
+  
   console.error(`[${errorId}] Error:`, {
     message: err.message,
     stack: err.stack,
     path: req.path,
     method: req.method,
-    ip: req.ip
+    ip: req.ip,
+    body: sanitizedBody // Only log sanitized body
   });
   
   // Don't expose error details to client
