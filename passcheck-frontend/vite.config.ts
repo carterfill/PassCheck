@@ -8,7 +8,7 @@ function htmlEnvReplace(): Plugin {
     name: 'html-env-replace',
     transformIndexHtml(html) {
       const gaId = process.env.VITE_GA_ID || '';
-      return html.replace(/%VITE_GA_ID%/g, gaId);
+      return html.replace(/%PASSCHECK_GA_ID%/g, gaId);
     },
   }
 }

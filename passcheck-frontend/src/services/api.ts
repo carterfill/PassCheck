@@ -31,7 +31,7 @@ const api = axios.create({
     'Accept': 'application/json',
   },
   timeout: 30000, // 30 seconds timeout
-  withCredentials: false, // CORS requests
+  withCredentials: true,
 });
 
 export interface PasswordAnalysis {

@@ -1,5 +1,4 @@
 import { Request, Response, NextFunction } from 'express';
-import { decryptPassword, isEncrypted } from '../utils/encryption';
 
 // Maximum input sizes to prevent DoS
 const MAX_PASSWORD_LENGTH = 1000;
@@ -27,7 +26,9 @@ export function sanitizeString(input: string, maxLength: number): string {
   return sanitized.trim();
 }
 
-// Validate password input (with decryption)
+// Validate password input.
+// Passwords are sent over HTTPS/TLS, so the API should not rely on a shared
+// client-side secret for "extra" encryption.
 export function validatePassword(req: Request, res: Response, next: NextFunction): void {
   try {
     const { password } = req.body;
@@ -52,19 +53,7 @@ export function validatePassword(req: Request, res: Response, next: NextFunction
       return;
     }
     
-    // Decrypt password if it's encrypted
-    let decryptedPassword = password;
-    if (isEncrypted(password)) {
-      try {
-        decryptedPassword = decryptPassword(password);
-      } catch (error) {
-        res.status(400).json({ error: 'Invalid encrypted password format' });
-        return;
-      }
-    }
-    
-    // Sanitize password
-    req.body.password = sanitizeString(decryptedPassword, MAX_PASSWORD_LENGTH);
+    req.body.password = sanitizeString(password, MAX_PASSWORD_LENGTH);
     next();
   } catch (error) {
     res.status(400).json({ error: 'Invalid password input' });

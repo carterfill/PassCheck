@@ -37,27 +37,42 @@ setInterval(() => {
 
 const COOKIE_NAME = 'passcheck_session_id';
 const COOKIE_MAX_AGE = 365 * 24 * 60 * 60 * 1000; // 1 year
+const REQUEST_SESSION_ID_KEY = 'passcheckSessionId';
+
+type SessionRequest = Request & {
+  [REQUEST_SESSION_ID_KEY]?: string;
+};
 
 // Get or create browser session ID
 // Uses cookie to track individual browsers instead of IP addresses
 export function getBrowserSessionId(req: Request, res?: Response): string {
+  const sessionReq = req as SessionRequest;
+
+  if (sessionReq[REQUEST_SESSION_ID_KEY]) {
+    return sessionReq[REQUEST_SESSION_ID_KEY] as string;
+  }
+
   // Try to get existing session ID from cookie
   let sessionId = req.cookies?.[COOKIE_NAME];
   
   // Validate session ID format (should be alphanumeric, 32 chars)
   if (sessionId && typeof sessionId === 'string' && /^[a-zA-Z0-9]{32}$/.test(sessionId)) {
+    sessionReq[REQUEST_SESSION_ID_KEY] = sessionId;
     return sessionId;
   }
   
   // Generate new session ID if not exists or invalid
   sessionId = crypto.randomBytes(16).toString('hex');
+  sessionReq[REQUEST_SESSION_ID_KEY] = sessionId;
   
   // Set cookie with session ID if response object is provided
   if (res) {
+    const isProduction = process.env.NODE_ENV === 'production';
+
     res.cookie(COOKIE_NAME, sessionId, {
       httpOnly: true, // Prevent XSS attacks
-      secure: process.env.NODE_ENV === 'production', // HTTPS only in production
-      sameSite: 'strict', // CSRF protection
+      secure: isProduction, // HTTPS only in production
+      sameSite: isProduction ? 'none' : 'lax',
       maxAge: COOKIE_MAX_AGE,
       path: '/'
     });
